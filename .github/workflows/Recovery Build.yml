@@ -6,11 +6,24 @@ on:
       MANIFEST_URL:
         description: 'MANIFEST_URL (if not using SSH keys, use https:// URL)'
         required: true
-        default: 'git@github.com:minimal-manifest-twrp/platform_manifest_twrp_aosp.git'
+        default: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp'
+        type: choice
+        options:
+        - 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
+        - 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp'
       MANIFEST_BRANCH:
         description: 'MANIFEST_BRANCH'
         required: true
         default: 'twrp-12.1'
+        type: choice
+        options:
+        - twrp-12.1
+        - twrp-11
+        - twrp-9.0
+        - twrp-8.1
+        - twrp-7.1
+        - twrp-6.0
+        - twrp-5.1
       DEVICE_TREE_URL:
         description: 'DEVICE_TREE_URL'
         required: true
@@ -33,14 +46,23 @@ on:
         description: 'DEVICE_NAME'
         required: true
         default: 'I003D'
-      MAKEFILE_NAME:
-        description: 'MAKEFILE_NAME'
+      MANIFEST_TYPE:
+        description: 'MANIFEST_TYPE'
         required: true
-        default: 'twrp_I003D'
+        default: 'twrp'
+        type: choice
+        options:
+        - twrp
+        - omni
       BUILD_TARGET:
         description: 'BUILD_TARGET'
         required: true
         default: 'recovery'
+        type: choice
+        options:
+        - recovery
+        - boot
+        - vendorboot
 
 jobs:
   build:
@@ -58,21 +80,35 @@ jobs:
         echo "Device Name: ${{ github.event.inputs.DEVICE_NAME }}"
         echo "Build Target: ${{ github.event.inputs.BUILD_TARGET }}.img"
         echo "::endgroup::"
- 
+
+    - name: Remove Useless Package
+      run: |
+        docker rmi `docker images -q`
+        sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/sudo apt/sources.list.d
+        sudo apt -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php*
+        sudo apt -y autoremove --purge
+        sudo apt -y autoclean
+        sudo apt clean
+
+    - name: Maximize Build Space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 1024
+        swap-size-mb: 10240
+        remove-dotnet: 'true'
+        temp-reserve-mb: 1024
+        remove-android: 'true'
+        remove-haskell: 'true'
+
     # You might want to Checkout your repo first, but not mandatory
     - name: Check Out
       uses: actions/checkout@v3
-    # Cleanup The Actions Workspace Using Custom Composite Run Actions
-    - name: Cleanup
-      uses: rokibhasansagar/slimhub_actions@main
-      # That's it! Now use your normal steps
 
     - name: Prepare the environment
       run: |
         sudo apt update
         sudo apt -y upgrade
         sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libwxgtk3.0-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp python qemu-user-static libstdc++-10-dev
-
 
     - name: Install OpenJDK 7
       if: |
@@ -106,14 +142,14 @@ jobs:
       run: |
         echo "::set-output name=date::$(date +%F)"
       id: var
-      
+
     - name: Install repo
       run: |
         mkdir ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         export PATH=~/bin:$PATH
-      
+
     - name: Initialize repo
       run: |
         PATH=~/bin:$PATH
@@ -124,14 +160,14 @@ jobs:
         git config --global user.email "captainthrowback@hotmail.com"
         repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
       id: pwd
-          
+
     - name: Repo Sync
       run: |
         PATH=~/bin:$PATH
         cd workspace
         repo sync -j$(nproc --all) -f --force-sync
         ls -al
-      
+
     - name: Clone device tree
       run: |
         PATH=~/bin:$PATH
@@ -167,11 +203,6 @@ jobs:
         bash ${GITHUB_WORKSPACE}/scripts/convert.sh ${{ github.event.inputs.DEVICE_PATH }}/omni.dependencies
         repo sync -j$(nproc --all)
 
-    - name: Set Swap Space
-      uses: pierotofy/set-swap-space@master
-      with:
-        swap-size-gb: 12
-
     - name: Check Build Branch
       if: ${{ github.event.inputs.MANIFEST_BRANCH == 'twrp-12.1' }}
       run: |
@@ -185,11 +216,11 @@ jobs:
         PATH=~/bin:$PATH
         cd ${{ steps.pwd.outputs.pwd }}
         source build/envsetup.sh
-        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
+        lunch ${{ github.event.inputs.MANIFEST_TYPE }}_${{ github.event.inputs.DEVICE_NAME }}-eng
         export ALLOW_MISSING_DEPENDENCIES=true
         make clean
-        make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)        
-      
+        make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
+
     - name: Upload to Release
       uses: softprops/action-gh-release@v1
       with:
