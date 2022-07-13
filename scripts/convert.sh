@@ -6,7 +6,7 @@ else
 	echo " ** Input File : $1 does not exist"
 	echo " ** Please specify the correct dependencies file"
 	echo " ** Usage : bash <path-to-script> <path-to-dependencies-file> [<path-to-local-manifest>]"
-	exit 0
+	exit 1
 fi
 
 if [ -n "$2" ]; then
@@ -19,7 +19,7 @@ else
 	echo " ** And .repo folder does not exist in $PWD"
 	echo " ** Either run the script from root of your source or specify a custom path+filename"
 	echo " ** Usage : bash <path-to-script> <path-to-dependencies-file> [<path-to-local-manifest>]"
-	exit 0
+	exit 1
 fi
 
 
